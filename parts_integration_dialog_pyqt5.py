@@ -645,3 +645,56 @@ def show_cm_parts_details(cm_number, conn, parent=None):
     """
     dialog = CMPartsViewDialog(cm_number, conn, parent)
     return dialog
+
+
+# ===== COMPATIBILITY WRAPPER CLASS =====
+class CMPartsIntegration:
+    """
+    Compatibility wrapper for CM Parts Integration
+    Provides the same interface as the old Tkinter version for backward compatibility
+    """
+
+    def __init__(self, parent):
+        """
+        Initialize with reference to parent CMMS application
+
+        Args:
+            parent: Parent CMMS main window
+        """
+        self.parent = parent
+        self.conn = parent.conn
+
+    def show_parts_consumption_dialog(self, cm_number, technician_name, callback=None):
+        """
+        Show dialog for recording parts consumed during corrective maintenance
+
+        Args:
+            cm_number: The CM work order number
+            technician_name: Name of technician performing the work
+            callback: Function to call when dialog is closed (receives success bool)
+
+        Returns:
+            Dialog instance
+        """
+        dialog = CMPartsIntegrationDialog(cm_number, technician_name, self.conn, self.parent)
+
+        # Connect signal if callback is provided
+        if callback:
+            dialog.parts_saved.connect(callback)
+
+        dialog.exec_()
+        return dialog
+
+    def show_cm_parts_details(self, cm_number):
+        """
+        Show read-only view of parts consumed for a specific CM
+
+        Args:
+            cm_number: The CM work order number to view parts for
+
+        Returns:
+            Dialog instance
+        """
+        dialog = CMPartsViewDialog(cm_number, self.conn, self.parent)
+        dialog.exec_()
+        return dialog
