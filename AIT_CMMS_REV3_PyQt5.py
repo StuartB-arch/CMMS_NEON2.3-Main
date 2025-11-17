@@ -157,7 +157,7 @@ except ImportError:
 
 # ===== INTEGRATION MODULES =====
 try:
-    from cm_parts_integration import CMPartsIntegration
+    from parts_integration_dialog_pyqt5 import CMPartsIntegration
     CM_PARTS_INTEGRATION_AVAILABLE = True
 except ImportError:
     print("WARNING: CM Parts Integration not available")
