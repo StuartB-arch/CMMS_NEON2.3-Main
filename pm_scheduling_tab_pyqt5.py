@@ -28,6 +28,9 @@ from psycopg2 import extras
 import os
 import json
 
+# Import database utilities for connection pooling
+from database_utils import db_pool as _db_pool_module
+
 # ReportLab imports for PDF generation
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
@@ -51,17 +54,17 @@ class PMSchedulingTab(QWidget):
 
     status_updated = pyqtSignal(str)  # Signal to update status bar
 
-    def __init__(self, conn, technicians, parent=None):
+    def __init__(self, db_pool, technicians, parent=None):
         """
         Initialize PM Scheduling Tab
 
         Args:
-            conn: Database connection object
+            db_pool: DatabaseConnectionPool instance for connection pooling
             technicians: List of technician names
             parent: Parent widget
         """
         super().__init__(parent)
-        self.conn = conn
+        self.db_pool = db_pool
         self.technicians = technicians
         self.weekly_pm_target = 130  # Target number of PMs per week
 
@@ -77,6 +80,12 @@ class PMSchedulingTab(QWidget):
 
         # Load the latest schedule after UI is initialized
         QTimer.singleShot(100, self.load_latest_weekly_schedule)
+
+    @property
+    def conn(self):
+        """Compatibility property - returns a connection from pool for legacy code"""
+        # This allows existing code using self.conn to work with connection pooling
+        return self.db_pool.get_connection()
 
     def init_ui(self):
         """Initialize the user interface"""
@@ -266,36 +275,30 @@ class PMSchedulingTab(QWidget):
     def load_latest_weekly_schedule(self):
         """Load the most recent weekly schedule on startup"""
         try:
-            cursor = self.conn.cursor(cursor_factory=extras.RealDictCursor)
+            with self.db_pool.get_cursor(commit=False) as cursor:
+                # Find the most recent week with scheduled PMs
+                cursor.execute('''
+                    SELECT week_start_date
+                    FROM weekly_pm_schedules
+                    ORDER BY week_start_date DESC
+                    LIMIT 1
+                ''')
 
-            # Find the most recent week with scheduled PMs
-            cursor.execute('''
-                SELECT week_start_date
-                FROM weekly_pm_schedules
-                ORDER BY week_start_date DESC
-                LIMIT 1
-            ''')
+                latest_week = cursor.fetchone()
 
-            latest_week = cursor.fetchone()
-
-            if latest_week:
-                # Find the index of this week in the combo box
-                week_start = str(latest_week['week_start_date'])
-                index = self.week_combo.findText(week_start)
-                if index >= 0:
-                    self.week_combo.setCurrentIndex(index)
-                self.refresh_technician_schedules()
-                self.status_updated.emit(f"Loaded latest weekly schedule: {week_start}")
-            else:
-                self.status_updated.emit("No weekly schedules found")
+                if latest_week:
+                    # Find the index of this week in the combo box
+                    week_start = str(latest_week['week_start_date'])
+                    index = self.week_combo.findText(week_start)
+                    if index >= 0:
+                        self.week_combo.setCurrentIndex(index)
+                    self.refresh_technician_schedules()
+                    self.status_updated.emit(f"Loaded latest weekly schedule: {week_start}")
+                else:
+                    self.status_updated.emit("No weekly schedules found")
 
         except Exception as e:
             print(f"Error loading latest weekly schedule: {e}")
-            # Rollback failed transaction
-            try:
-                self.conn.rollback()
-            except:
-                pass
 
     def generate_weekly_assignments(self):
         """

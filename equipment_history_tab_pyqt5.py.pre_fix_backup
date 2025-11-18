@@ -21,10 +21,6 @@ from PyQt5.QtWidgets import (
     QTextEdit, QDialogButtonBox, QDateEdit, QSplitter, QFrame,
     QAbstractItemView, QGraphicsView, QGraphicsScene, QGraphicsRectItem,
     QGraphicsTextItem, QToolTip, QApplication
-
-# Import database utilities for connection pooling
-from database_utils import db_pool as _db_pool_module
-
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QDate, QRectF, QPointF
 from PyQt5.QtGui import QFont, QColor, QPen, QBrush, QPainter
@@ -58,13 +54,6 @@ class TimelineEvent:
         self.notes = notes
         self.color = color
 
-
-
-    @property
-    def conn(self):
-        """Compatibility property - returns a connection from pool for legacy code"""
-        # This allows existing code using self.conn to work with connection pooling
-        return self.db_pool.get_connection()
 
 class TimelineGraphicsItem(QGraphicsRectItem):
     """Custom graphics item for timeline events with tooltips"""
@@ -342,7 +331,7 @@ class EquipmentHistoryTab(QWidget):
 
     status_updated = pyqtSignal(str)  # Signal to update status bar
 
-    def __init__(self, db_pool, parent=None):
+    def __init__(self, conn, parent=None):
         """
         Initialize Equipment History Tab
 
@@ -351,7 +340,7 @@ class EquipmentHistoryTab(QWidget):
             parent: Parent widget
         """
         super().__init__(parent)
-        self.db_pool = db_pool
+        self.conn = conn
         self.current_bfm = None
         self.all_events = []  # Store all events for filtering
 

@@ -827,10 +827,8 @@ class AITCMMSSystemPyQt5(QMainWindow):
         """Create tabs based on user role - COMPLETE IMPLEMENTATION"""
         print(f"Creating tabs for role: {self.current_user_role}")
 
-        # Get database connection for tabs
-        # IMPORTANT: The connection will be used by tabs to create cursors
-        # Make sure tabs use cursor_factory=extras.RealDictCursor when creating cursors
-        conn = db_pool.get_connection()
+        # FIXED: Pass db_pool instead of a raw connection to prevent pool exhaustion
+        # Tabs will use db_pool.get_cursor() context manager for proper connection pooling
 
         if self.current_user_role == 'Manager':
             # MANAGER: Gets ALL tabs
@@ -839,7 +837,7 @@ class AITCMMSSystemPyQt5(QMainWindow):
             # 1. Equipment Management
             if EQUIPMENT_TAB_AVAILABLE:
                 try:
-                    self.equipment_tab = EquipmentTab(conn, self.technicians, self)
+                    self.equipment_tab = EquipmentTab(db_pool, self.technicians, self)
                     self.equipment_tab.status_updated.connect(self.update_status)
                     self.tab_widget.addTab(self.equipment_tab, "📋 Equipment")
                     print("  ✓ Equipment tab added")
@@ -850,7 +848,7 @@ class AITCMMSSystemPyQt5(QMainWindow):
             # 2. PM Scheduling
             if PM_SCHEDULING_TAB_AVAILABLE:
                 try:
-                    self.pm_scheduling_tab = PMSchedulingTab(conn, self.technicians, self)
+                    self.pm_scheduling_tab = PMSchedulingTab(db_pool, self.technicians, self)
                     self.pm_scheduling_tab.status_updated.connect(self.update_status)
                     self.tab_widget.addTab(self.pm_scheduling_tab, "📅 PM Scheduling")
                     print("  ✓ PM Scheduling tab added")
@@ -861,7 +859,7 @@ class AITCMMSSystemPyQt5(QMainWindow):
             # 3. PM Completion
             if PM_COMPLETION_TAB_AVAILABLE:
                 try:
-                    self.pm_completion_tab = PMCompletionTab(conn, self)
+                    self.pm_completion_tab = PMCompletionTab(db_pool, self)
                     self.pm_completion_tab.pm_completed.connect(self.on_pm_completed)
                     self.tab_widget.addTab(self.pm_completion_tab, "✅ PM Completion")
                     print("  ✓ PM Completion tab added")
@@ -873,7 +871,7 @@ class AITCMMSSystemPyQt5(QMainWindow):
             if CM_MANAGEMENT_TAB_AVAILABLE:
                 try:
                     self.cm_management_tab = CMManagementTab(
-                        conn, self.user_name, self.current_user_role,
+                        db_pool, self.user_name, self.current_user_role,
                         self.technicians, self
                     )
 
@@ -894,7 +892,7 @@ class AITCMMSSystemPyQt5(QMainWindow):
             # 5. MRO Stock Management
             if MRO_STOCK_TAB_AVAILABLE:
                 try:
-                    self.mro_stock_tab = MROStockTab(conn, self.user_name, self)
+                    self.mro_stock_tab = MROStockTab(db_pool, self.user_name, self)
                     self.tab_widget.addTab(self.mro_stock_tab, "📦 MRO Stock")
                     print("  ✓ MRO Stock tab added")
                 except Exception as e:
@@ -904,7 +902,7 @@ class AITCMMSSystemPyQt5(QMainWindow):
             # 6. Equipment History
             if EQUIPMENT_HISTORY_TAB_AVAILABLE:
                 try:
-                    self.equipment_history_tab = EquipmentHistoryTab(conn, self)
+                    self.equipment_history_tab = EquipmentHistoryTab(db_pool, self)
                     self.tab_widget.addTab(self.equipment_history_tab, "📊 Equipment History")
                     print("  ✓ Equipment History tab added")
                 except Exception as e:
@@ -938,7 +936,7 @@ class AITCMMSSystemPyQt5(QMainWindow):
             # PM Completion
             if PM_COMPLETION_TAB_AVAILABLE:
                 try:
-                    self.pm_completion_tab = PMCompletionTab(conn, self)
+                    self.pm_completion_tab = PMCompletionTab(db_pool, self)
                     self.pm_completion_tab.pm_completed.connect(self.on_pm_completed)
                     self.tab_widget.addTab(self.pm_completion_tab, "✅ PM Completion")
                     print("  ✓ PM Completion tab added")
@@ -949,7 +947,7 @@ class AITCMMSSystemPyQt5(QMainWindow):
             if CM_MANAGEMENT_TAB_AVAILABLE:
                 try:
                     self.cm_management_tab = CMManagementTab(
-                        conn, self.user_name, self.current_user_role,
+                        db_pool, self.user_name, self.current_user_role,
                         self.technicians, self
                     )
                     self.tab_widget.addTab(self.cm_management_tab, "🔧 CM Management")
@@ -960,7 +958,7 @@ class AITCMMSSystemPyQt5(QMainWindow):
             # Equipment (view-only)
             if EQUIPMENT_TAB_AVAILABLE:
                 try:
-                    self.equipment_tab = EquipmentTab(conn, self.technicians, self)
+                    self.equipment_tab = EquipmentTab(db_pool, self.technicians, self)
                     self.equipment_tab.status_updated.connect(self.update_status)
                     self.tab_widget.addTab(self.equipment_tab, "📋 Equipment (View)")
                     print("  ✓ Equipment tab added (view-only)")
@@ -970,7 +968,7 @@ class AITCMMSSystemPyQt5(QMainWindow):
             # Equipment History
             if EQUIPMENT_HISTORY_TAB_AVAILABLE:
                 try:
-                    self.equipment_history_tab = EquipmentHistoryTab(conn, self)
+                    self.equipment_history_tab = EquipmentHistoryTab(db_pool, self)
                     self.tab_widget.addTab(self.equipment_history_tab, "📊 Equipment History")
                     print("  ✓ Equipment History tab added")
                 except Exception as e:
@@ -983,7 +981,7 @@ class AITCMMSSystemPyQt5(QMainWindow):
             # PM Completion
             if PM_COMPLETION_TAB_AVAILABLE:
                 try:
-                    self.pm_completion_tab = PMCompletionTab(conn, self)
+                    self.pm_completion_tab = PMCompletionTab(db_pool, self)
                     self.pm_completion_tab.pm_completed.connect(self.on_pm_completed)
                     self.tab_widget.addTab(self.pm_completion_tab, "✅ PM Completion")
                     print("  ✓ PM Completion tab added")
@@ -994,7 +992,7 @@ class AITCMMSSystemPyQt5(QMainWindow):
             if CM_MANAGEMENT_TAB_AVAILABLE:
                 try:
                     self.cm_management_tab = CMManagementTab(
-                        conn, self.user_name, self.current_user_role,
+                        db_pool, self.user_name, self.current_user_role,
                         self.technicians, self
                     )
                     self.tab_widget.addTab(self.cm_management_tab, "🔧 CM Management")
@@ -1005,7 +1003,7 @@ class AITCMMSSystemPyQt5(QMainWindow):
             # MRO Stock
             if MRO_STOCK_TAB_AVAILABLE:
                 try:
-                    self.mro_stock_tab = MROStockTab(conn, self.user_name, self)
+                    self.mro_stock_tab = MROStockTab(db_pool, self.user_name, self)
                     self.tab_widget.addTab(self.mro_stock_tab, "📦 MRO Stock")
                     print("  ✓ MRO Stock tab added")
                 except Exception as e:

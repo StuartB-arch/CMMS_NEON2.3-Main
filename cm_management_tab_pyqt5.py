@@ -29,6 +29,9 @@ import psycopg2
 from psycopg2 import extras
 from typing import Optional, Callable, List, Tuple
 
+# Import database utilities for connection pooling
+from database_utils import db_pool as _db_pool_module
+
 
 class CMManagementTab(QWidget):
     """
@@ -41,20 +44,20 @@ class CMManagementTab(QWidget):
     - Complete workflow management
     """
 
-    def __init__(self, db_connection, user_name: str, user_role: str,
+    def __init__(self, db_pool, user_name: str, user_role: str,
                  technicians: List[str], parent=None):
         """
         Initialize CM Management Tab
 
         Args:
-            db_connection: PostgreSQL database connection
+            db_pool: DatabaseConnectionPool instance for connection pooling
             user_name: Current logged-in user name
             user_role: User role (Manager, Technician, etc.)
             technicians: List of available technicians
             parent: Parent widget
         """
         super().__init__(parent)
-        self.conn = db_connection
+        self.db_pool = db_pool
         self.user_name = user_name
         self.user_role = user_role
         self.technicians = technicians
@@ -63,6 +66,12 @@ class CMManagementTab(QWidget):
 
         self.init_ui()
         self.load_data()
+
+    @property
+    def conn(self):
+        """Compatibility property - returns a connection from pool for legacy code"""
+        # This allows existing code using self.conn to work with connection pooling
+        return self.db_pool.get_connection()
 
     def set_parts_integration(self, parts_integration):
         """Set the parts integration module for parts consumption tracking"""
@@ -274,40 +283,38 @@ class CMManagementTab(QWidget):
     def load_corrective_maintenance(self):
         """Load corrective maintenance data with enhanced source tracking"""
         try:
-            cursor = self.conn.cursor(cursor_factory=extras.RealDictCursor)
-            cursor.execute('''
-                SELECT cm_number, bfm_equipment_no, description, priority,
-                    assigned_technician, status, created_date, notes
-                FROM corrective_maintenance
-                ORDER BY created_date DESC
-            ''')
+            with self.db_pool.get_cursor() as cursor:
+                cursor.execute('''
+                    SELECT cm_number, bfm_equipment_no, description, priority,
+                        assigned_technician, status, created_date, notes
+                    FROM corrective_maintenance
+                    ORDER BY created_date DESC
+                ''')
 
-            # Clear table
-            self.cm_table.setRowCount(0)
-            self.cm_original_data = []
+                # Clear table
+                self.cm_table.setRowCount(0)
+                self.cm_original_data = []
 
-            # Add CM records
-            for idx, cm in enumerate(cursor.fetchall()):
-                cm_number, bfm_no, description, priority, assigned, status, created, notes = cm
+                # Add CM records
+                for idx, cm in enumerate(cursor.fetchall()):
+                    cm_number, bfm_no, description, priority, assigned, status, created, notes = cm
 
-                # Determine source
-                source = "SharePoint" if notes and "Imported from SharePoint" in notes else "Manual"
+                    # Determine source
+                    source = "SharePoint" if notes and "Imported from SharePoint" in notes else "Manual"
 
-                # Truncate description for display
-                display_desc = (description[:47] + '...') if description and len(description) > 50 else (description or '')
+                    # Truncate description for display
+                    display_desc = (description[:47] + '...') if description and len(description) > 50 else (description or '')
 
-                # Store original data for filtering
-                row_data = (cm_number, bfm_no, display_desc, priority, assigned, status, created, source)
-                self.cm_original_data.append(row_data)
+                    # Store original data for filtering
+                    row_data = (cm_number, bfm_no, display_desc, priority, assigned, status, created, source)
+                    self.cm_original_data.append(row_data)
 
-                # Add to table
-                self.cm_table.insertRow(idx)
-                for col, value in enumerate(row_data):
-                    item = QTableWidgetItem(str(value) if value else '')
-                    item.setFlags(item.flags() & ~Qt.ItemIsEditable)  # Make read-only
-                    self.cm_table.setItem(idx, col, item)
-
-            cursor.close()
+                    # Add to table
+                    self.cm_table.insertRow(idx)
+                    for col, value in enumerate(row_data):
+                        item = QTableWidgetItem(str(value) if value else '')
+                        item.setFlags(item.flags() & ~Qt.ItemIsEditable)  # Make read-only
+                        self.cm_table.setItem(idx, col, item)
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load corrective maintenance: {str(e)}")
@@ -344,37 +351,34 @@ class CMManagementTab(QWidget):
     def load_missing_parts_list(self):
         """Load equipment missing parts data"""
         try:
-            cursor = self.conn.cursor(cursor_factory=extras.RealDictCursor)
+            with self.db_pool.get_cursor(commit=False) as cursor:
+                # Fetch all missing parts records
+                cursor.execute('''
+                    SELECT emp_number, bfm_equipment_no, description, priority,
+                        assigned_technician, status, reported_date, missing_parts_description
+                    FROM equipment_missing_parts
+                    ORDER BY reported_date DESC
+                ''')
 
-            # Fetch all missing parts records
-            cursor.execute('''
-                SELECT emp_number, bfm_equipment_no, description, priority,
-                    assigned_technician, status, reported_date, missing_parts_description
-                FROM equipment_missing_parts
-                ORDER BY reported_date DESC
-            ''')
+                # Clear table
+                self.emp_table.setRowCount(0)
 
-            # Clear table
-            self.emp_table.setRowCount(0)
+                # Add missing parts records
+                records = cursor.fetchall()
+                for idx, emp in enumerate(records):
+                    emp_number, bfm_no, description, priority, assigned, status, reported_date, missing_parts = emp
 
-            # Add missing parts records
-            records = cursor.fetchall()
-            for idx, emp in enumerate(records):
-                emp_number, bfm_no, description, priority, assigned, status, reported_date, missing_parts = emp
+                    # Truncate description and missing parts for display
+                    display_desc = (description[:47] + '...') if description and len(description) > 50 else (description or '')
+                    display_parts = (missing_parts[:97] + '...') if missing_parts and len(missing_parts) > 100 else (missing_parts or '')
 
-                # Truncate description and missing parts for display
-                display_desc = (description[:47] + '...') if description and len(description) > 50 else (description or '')
-                display_parts = (missing_parts[:97] + '...') if missing_parts and len(missing_parts) > 100 else (missing_parts or '')
+                    self.emp_table.insertRow(idx)
+                    row_data = (emp_number, bfm_no, display_desc, priority, assigned, status, reported_date, display_parts)
 
-                self.emp_table.insertRow(idx)
-                row_data = (emp_number, bfm_no, display_desc, priority, assigned, status, reported_date, display_parts)
-
-                for col, value in enumerate(row_data):
-                    item = QTableWidgetItem(str(value) if value else '')
-                    item.setFlags(item.flags() & ~Qt.ItemIsEditable)
-                    self.emp_table.setItem(idx, col, item)
-
-            cursor.close()
+                    for col, value in enumerate(row_data):
+                        item = QTableWidgetItem(str(value) if value else '')
+                        item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                        self.emp_table.setItem(idx, col, item)
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load equipment missing parts: {str(e)}")
@@ -382,38 +386,36 @@ class CMManagementTab(QWidget):
     def update_statistics(self):
         """Update CM statistics display"""
         try:
-            cursor = self.conn.cursor(cursor_factory=extras.RealDictCursor)
+            with self.db_pool.get_cursor(commit=False) as cursor:
+                # Total CMs
+                cursor.execute("SELECT COUNT(*) FROM corrective_maintenance")
+                total_cms = cursor.fetchone()[0]
 
-            # Total CMs
-            cursor.execute("SELECT COUNT(*) FROM corrective_maintenance")
-            total_cms = cursor.fetchone()[0]
+                # Open CMs
+                cursor.execute("SELECT COUNT(*) FROM corrective_maintenance WHERE status = 'Open'")
+                open_cms = cursor.fetchone()[0]
 
-            # Open CMs
-            cursor.execute("SELECT COUNT(*) FROM corrective_maintenance WHERE status = 'Open'")
-            open_cms = cursor.fetchone()[0]
+                # Closed this month
+                cursor.execute("""
+                    SELECT COUNT(*) FROM corrective_maintenance
+                    WHERE status = 'Closed'
+                    AND EXTRACT(MONTH FROM completion_date::DATE) = EXTRACT(MONTH FROM CURRENT_DATE)
+                    AND EXTRACT(YEAR FROM completion_date::DATE) = EXTRACT(YEAR FROM CURRENT_DATE)
+                """)
+                closed_this_month = cursor.fetchone()[0]
 
-            # Closed this month
-            cursor.execute("""
-                SELECT COUNT(*) FROM corrective_maintenance
-                WHERE status = 'Closed'
-                AND EXTRACT(MONTH FROM completion_date::DATE) = EXTRACT(MONTH FROM CURRENT_DATE)
-                AND EXTRACT(YEAR FROM completion_date::DATE) = EXTRACT(YEAR FROM CURRENT_DATE)
-            """)
-            closed_this_month = cursor.fetchone()[0]
+                # Missing parts count
+                cursor.execute("SELECT COUNT(*) FROM equipment_missing_parts WHERE status = 'Open'")
+                missing_parts_open = cursor.fetchone()[0]
 
-            # Missing parts count
-            cursor.execute("SELECT COUNT(*) FROM equipment_missing_parts WHERE status = 'Open'")
-            missing_parts_open = cursor.fetchone()[0]
+                stats_text = (
+                    f"Total CMs: {total_cms} | "
+                    f"Open: {open_cms} | "
+                    f"Closed This Month: {closed_this_month} | "
+                    f"Missing Parts (Open): {missing_parts_open}"
+                )
 
-            stats_text = (
-                f"Total CMs: {total_cms} | "
-                f"Open: {open_cms} | "
-                f"Closed This Month: {closed_this_month} | "
-                f"Missing Parts (Open): {missing_parts_open}"
-            )
-
-            self.stats_label.setText(stats_text)
-            cursor.close()
+                self.stats_label.setText(stats_text)
 
         except Exception as e:
             self.stats_label.setText(f"Statistics unavailable: {str(e)}")

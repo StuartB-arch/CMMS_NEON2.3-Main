@@ -26,13 +26,15 @@ from datetime import datetime, timedelta
 import traceback
 import re
 
+# Import database utilities for connection pooling
+from database_utils import db_pool
+
 
 class EquipmentPMHistoryDialog(QDialog):
     """Dialog to display PM history for a specific equipment"""
 
-    def __init__(self, conn, bfm_no, parent=None):
+    def __init__(self, bfm_no, parent=None):
         super().__init__(parent)
-        self.conn = conn
         self.bfm_no = bfm_no
         self.setWindowTitle(f"PM History - {bfm_no}")
         self.setMinimumSize(700, 500)
@@ -69,38 +71,38 @@ class EquipmentPMHistoryDialog(QDialog):
     def load_history(self):
         """Load and display PM history for the equipment"""
         try:
-            cursor = self.conn.cursor(cursor_factory=extras.RealDictCursor)
-            cursor.execute('''
-                SELECT pm_type, technician_name, completion_date,
-                    (labor_hours + labor_minutes/60.0) as total_hours,
-                    notes
-                FROM pm_completions
-                WHERE bfm_equipment_no = %s
-                ORDER BY completion_date DESC LIMIT 20
-            ''', (self.bfm_no,))
+            with db_pool.get_cursor(commit=False) as cursor:
+                cursor.execute('''
+                    SELECT pm_type, technician_name, completion_date,
+                        (labor_hours + labor_minutes/60.0) as total_hours,
+                        notes
+                    FROM pm_completions
+                    WHERE bfm_equipment_no = %s
+                    ORDER BY completion_date DESC LIMIT 20
+                ''', (self.bfm_no,))
 
-            completions = cursor.fetchall()
+                completions = cursor.fetchall()
 
-            if completions:
-                self.history_table.setRowCount(len(completions))
-                for row, completion in enumerate(completions):
-                    pm_type = completion['pm_type']
-                    tech = completion['technician_name']
-                    date = completion['completion_date']
-                    hours = completion['total_hours']
-                    notes = completion['notes']
-                    self.history_table.setItem(row, 0, QTableWidgetItem(str(date)))
-                    self.history_table.setItem(row, 1, QTableWidgetItem(pm_type))
-                    self.history_table.setItem(row, 2, QTableWidgetItem(tech))
-                    self.history_table.setItem(row, 3, QTableWidgetItem(f"{hours:.1f}h" if hours else "0.0h"))
-                    notes_text = notes[:100] + "..." if notes and len(notes) > 100 else (notes or "")
-                    self.history_table.setItem(row, 4, QTableWidgetItem(notes_text))
+                if completions:
+                    self.history_table.setRowCount(len(completions))
+                    for row, completion in enumerate(completions):
+                        pm_type = completion['pm_type']
+                        tech = completion['technician_name']
+                        date = completion['completion_date']
+                        hours = completion['total_hours']
+                        notes = completion['notes']
+                        self.history_table.setItem(row, 0, QTableWidgetItem(str(date)))
+                        self.history_table.setItem(row, 1, QTableWidgetItem(pm_type))
+                        self.history_table.setItem(row, 2, QTableWidgetItem(tech))
+                        self.history_table.setItem(row, 3, QTableWidgetItem(f"{hours:.1f}h" if hours else "0.0h"))
+                        notes_text = notes[:100] + "..." if notes and len(notes) > 100 else (notes or "")
+                        self.history_table.setItem(row, 4, QTableWidgetItem(notes_text))
 
-                # Resize columns to content
-                self.history_table.resizeColumnsToContents()
-            else:
-                QMessageBox.information(self, "No History",
-                                      f"No PM completions found for equipment {self.bfm_no}")
+                    # Resize columns to content
+                    self.history_table.resizeColumnsToContents()
+                else:
+                    QMessageBox.information(self, "No History",
+                                          f"No PM completions found for equipment {self.bfm_no}")
 
         except Exception as e:
             QMessageBox.critical(self, "Error",
@@ -128,9 +130,9 @@ class PMCompletionTab(QWidget):
     # Signal emitted when a PM is successfully completed
     pm_completed = pyqtSignal(str, str, str)  # bfm_no, pm_type, technician
 
-    def __init__(self, conn, parent=None):
+    def __init__(self, db_pool, parent=None):
         super().__init__(parent)
-        self.conn = conn
+        self.db_pool = db_pool
         self.technicians = []
         self.equipment_list = []
 
@@ -143,6 +145,12 @@ class PMCompletionTab(QWidget):
 
         # Load recent completions
         self.load_recent_completions()
+
+    @property
+    def conn(self):
+        """Compatibility property - returns a connection from pool for legacy code"""
+        # This allows existing code using self.conn to work with connection pooling
+        return self.db_pool.get_connection()
 
     def setup_ui(self):
         """Setup the complete UI for PM Completion tab"""

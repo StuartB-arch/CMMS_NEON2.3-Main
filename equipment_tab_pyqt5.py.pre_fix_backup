@@ -16,10 +16,6 @@ from PyQt5.QtWidgets import (
     QCheckBox, QMessageBox, QFileDialog, QGroupBox, QHeaderView,
     QTextEdit, QListWidget, QDialogButtonBox, QScrollArea, QFrame,
     QAbstractItemView
-
-# Import database utilities for connection pooling
-from database_utils import db_pool as _db_pool_module
-
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QFont, QColor
@@ -34,7 +30,7 @@ class EquipmentTab(QWidget):
 
     status_updated = pyqtSignal(str)  # Signal to update status bar
 
-    def __init__(self, db_pool, technicians, parent=None):
+    def __init__(self, conn, technicians, parent=None):
         """
         Initialize Equipment Tab
 
@@ -44,19 +40,12 @@ class EquipmentTab(QWidget):
             parent: Parent widget
         """
         super().__init__(parent)
-        self.db_pool = db_pool
+        self.conn = conn
         self.technicians = technicians
         self.equipment_data = []
 
         self.init_ui()
         self.refresh_equipment_list()
-
-
-    @property
-    def conn(self):
-        """Compatibility property - returns a connection from pool for legacy code"""
-        # This allows existing code using self.conn to work with connection pooling
-        return self.db_pool.get_connection()
 
     def init_ui(self):
         """Initialize the user interface"""
@@ -577,9 +566,9 @@ class EquipmentTab(QWidget):
 class AddEquipmentDialog(QDialog):
     """Dialog for adding new equipment"""
 
-    def __init__(self, db_pool, parent=None):
+    def __init__(self, conn, parent=None):
         super().__init__(parent)
-        self.db_pool = db_pool
+        self.conn = conn
         self.setWindowTitle("Add New Equipment")
         self.setModal(True)
         self.resize(500, 400)
@@ -670,9 +659,9 @@ class AddEquipmentDialog(QDialog):
 class EditEquipmentDialog(QDialog):
     """Dialog for editing existing equipment"""
 
-    def __init__(self, db_pool, bfm_no, technicians, parent=None):
+    def __init__(self, conn, bfm_no, technicians, parent=None):
         super().__init__(parent)
-        self.db_pool = db_pool
+        self.conn = conn
         self.bfm_no = bfm_no
         self.technicians = technicians
         self.equipment_data = None
@@ -1030,9 +1019,9 @@ class EditEquipmentDialog(QDialog):
 class BulkEditPMCyclesDialog(QDialog):
     """Dialog for bulk editing PM cycles"""
 
-    def __init__(self, db_pool, selected_bfms, parent=None):
+    def __init__(self, conn, selected_bfms, parent=None):
         super().__init__(parent)
-        self.db_pool = db_pool
+        self.conn = conn
         self.selected_bfms = selected_bfms
 
         self.setWindowTitle("Bulk Edit PM Cycles")
@@ -1207,9 +1196,9 @@ class BulkEditPMCyclesDialog(QDialog):
 class CSVMappingDialog(QDialog):
     """Dialog for mapping CSV columns to database fields"""
 
-    def __init__(self, db_pool, file_path, parent=None):
+    def __init__(self, conn, file_path, parent=None):
         super().__init__(parent)
-        self.db_pool = db_pool
+        self.conn = conn
         self.file_path = file_path
         self.mappings = {}
 

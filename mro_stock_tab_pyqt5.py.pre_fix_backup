@@ -32,10 +32,6 @@ from PyQt5.QtWidgets import (
     QMessageBox, QFileDialog, QGroupBox, QHeaderView, QTextEdit,
     QScrollArea, QFrame, QAbstractItemView, QSpinBox, QDoubleSpinBox,
     QTabWidget, QDialogButtonBox, QGridLayout
-
-# Import database utilities for connection pooling
-from database_utils import db_pool as _db_pool_module
-
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QByteArray
 from PyQt5.QtGui import QFont, QColor, QPixmap, QImage
@@ -49,7 +45,7 @@ import io
 class AddEditPartDialog(QDialog):
     """Dialog for adding or editing MRO parts"""
 
-    def __init__(self, db_pool, part_data=None, parent=None):
+    def __init__(self, conn, part_data=None, parent=None):
         """
         Initialize dialog
 
@@ -59,7 +55,7 @@ class AddEditPartDialog(QDialog):
             parent: Parent widget
         """
         super().__init__(parent)
-        self.db_pool = db_pool
+        self.conn = conn
         self.part_data = part_data
         self.is_edit_mode = part_data is not None
 
@@ -77,13 +73,6 @@ class AddEditPartDialog(QDialog):
 
         if self.is_edit_mode:
             self.populate_fields()
-
-
-    @property
-    def conn(self):
-        """Compatibility property - returns a connection from pool for legacy code"""
-        # This allows existing code using self.conn to work with connection pooling
-        return self.db_pool.get_connection()
 
     def setup_ui(self):
         """Setup the dialog UI"""
@@ -479,9 +468,9 @@ class AddEditPartDialog(QDialog):
 class PartDetailsDialog(QDialog):
     """Dialog to view detailed part information with tabs"""
 
-    def __init__(self, db_pool, part_number, parent=None):
+    def __init__(self, conn, part_number, parent=None):
         super().__init__(parent)
-        self.db_pool = db_pool
+        self.conn = conn
         self.part_number = part_number
         self.setWindowTitle(f"Part Details - {part_number}")
         self.setMinimumSize(900, 700)
@@ -878,9 +867,9 @@ class PartDetailsDialog(QDialog):
 class StockTransactionDialog(QDialog):
     """Dialog for stock transactions (add/remove stock)"""
 
-    def __init__(self, db_pool, part_number, current_user='System', parent=None):
+    def __init__(self, conn, part_number, current_user='System', parent=None):
         super().__init__(parent)
-        self.db_pool = db_pool
+        self.conn = conn
         self.part_number = part_number
         self.current_user = current_user
 
@@ -1040,9 +1029,9 @@ class StockTransactionDialog(QDialog):
 class CSVImportDialog(QDialog):
     """Dialog for importing MRO parts from CSV"""
 
-    def __init__(self, db_pool, parent=None):
+    def __init__(self, conn, parent=None):
         super().__init__(parent)
-        self.db_pool = db_pool
+        self.conn = conn
         self.csv_file = None
         self.headers = []
 
@@ -1270,7 +1259,7 @@ class MROStockTab(QWidget):
 
     status_updated = pyqtSignal(str)  # Signal to update status bar
 
-    def __init__(self, db_pool, current_user='System', parent=None):
+    def __init__(self, conn, current_user='System', parent=None):
         """
         Initialize MRO Stock Tab
 
@@ -1280,7 +1269,7 @@ class MROStockTab(QWidget):
             parent: Parent widget
         """
         super().__init__(parent)
-        self.db_pool = db_pool
+        self.conn = conn
         self.current_user = current_user
         self.inventory_data = []
 
